@@ -11,9 +11,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductServiceImpl implements ProductService {
@@ -31,15 +31,16 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ProductResponseDto createProduct(ProductRequestDto productDto) {
-        Product product = productMapper.toEntity(productDto);
-        product.setId(UUID.randomUUID());
+    public ProductResponseDto createProduct(ProductRequestDto dto) {
+        if (dto.getPrice() == null || dto.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Price must be greater than zero");
+        }
 
-        if (productDto.getCategoryIds() != null) {
-            List<Category> categories = categoryRepository.findAllById(productDto.getCategoryIds());
-            product.setCategories(new HashSet<>(categories));
-        } else {
-            product.setCategories(new HashSet<>());
+        Product product = productMapper.toEntity(dto);
+
+        if (dto.getCategoryIds() != null && !dto.getCategoryIds().isEmpty()) {
+            List<Category> categories = categoryRepository.findAllById(dto.getCategoryIds());
+            product.setCategories(categories);
         }
 
         Product savedProduct = productRepository.save(product);
@@ -47,43 +48,47 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ProductResponseDto getProductById(UUID id) {
-        Product product = productRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Product not found"));
-        return productMapper.toResponseDto(product);
-    }
-
-    @Override
     public List<ProductResponseDto> getAllProducts() {
         return productRepository.findAll()
                 .stream()
                 .map(productMapper::toResponseDto)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Override
-    public ProductResponseDto updateProduct(UUID id, ProductRequestDto productDto) {
-        Product existingProduct = productRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Product not found"));
+    public ProductResponseDto getProductById(UUID id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+        return productMapper.toResponseDto(product);
+    }
 
-        existingProduct.setProductName(productDto.getProductName());
-        existingProduct.setPrice(productDto.getPrice());
-        existingProduct.setExpirationDate(productDto.getExpirationDate());
-
-        if (productDto.getCategoryIds() != null) {
-            List<Category> categories = categoryRepository.findAllById(productDto.getCategoryIds());
-            existingProduct.setCategories(new HashSet<>(categories));
-        } else {
-            existingProduct.setCategories(new HashSet<>());
+    @Override
+    public ProductResponseDto updateProduct(UUID id, ProductRequestDto dto) {
+        if (dto.getPrice() == null || dto.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Price must be greater than zero");
         }
 
-        Product updatedProduct = productRepository.save(existingProduct);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+
+        product.setProductName(dto.getProductName());
+        product.setPrice(dto.getPrice());
+        product.setExpirationDate(dto.getExpirationDate());
+
+        if (dto.getCategoryIds() != null) {
+            List<Category> categories = categoryRepository.findAllById(dto.getCategoryIds());
+            product.setCategories(categories);
+        }
+
+        Product updatedProduct = productRepository.save(product);
         return productMapper.toResponseDto(updatedProduct);
     }
 
     @Override
     public void deleteProduct(UUID id) {
-        productRepository.deleteById(id);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+        productRepository.delete(product);
     }
 
     @Override
@@ -91,14 +96,14 @@ public class ProductServiceImpl implements ProductService {
         return productRepository.findByExpirationDateBefore(date)
                 .stream()
                 .map(productMapper::toResponseDto)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Override
-    public List<ProductResponseDto> getProductsByPriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
-        return productRepository.findByPriceBetween(minPrice, maxPrice)
+    public List<ProductResponseDto> getProductsByPriceRange(BigDecimal min, BigDecimal max) {
+        return productRepository.findByPriceBetween(min, max)
                 .stream()
                 .map(productMapper::toResponseDto)
-                .toList();
+                .collect(Collectors.toList());
     }
 }
